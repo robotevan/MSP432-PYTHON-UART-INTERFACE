@@ -3,14 +3,14 @@ import threading
 from os import system
 
 BAUD_RATE = 115200
-PORT = "//./COM4"
-PARITY = serial.PARITY_EVEN
+PORT = "COM4"
+PARITY = serial.PARITY_NONE
 DATA_SIZE = serial.EIGHTBITS
 STOP_BITS = serial.STOPBITS_ONE
 
 NEXT_STATE = b'a'
 PREV_STATE = b'b'
-
+CURR_STATE = b'c'  # Doesn't matter what this is, MSP echos state if not next/prev command
 
 class UARTConnection:
     def __init__(self):
@@ -21,49 +21,51 @@ class UARTConnection:
         self.connection.bytesize = DATA_SIZE
         self.connection.stopbits = STOP_BITS
         self.connection.open()  # Create the serial connection
-        read_poll_thread = threading.Thread(target=self.poll_read_UART)
-        read_poll_thread.start()
+        self.running = True
         self.curr_state = 0
-        self.read_thread = threading.Thread(target=self.poll_read_UART)
-        self.read_thread.start()
+        self.read_poll_thread = threading.Thread(target=self.poll_user_input)
+        self.read_poll_thread.start()
+        self.connection.write(CURR_STATE)
+        self._print_menu()
 
     def _print_menu(self):
+        system("cls")
         print("_______________________________________________________")
         print("|   Start by entering one of the following commands:  |\n"
               "|       -next: go to next state                       |\n"
               "|       -prev: go to previous state                   |\n"
+              "|       - q  : quit the application                   |\n"
               "|-----------------------------------------------------|\n"
               "|    Current State: " + str(self.curr_state) +"                                 |\n"
-              "|-----------------------------------------------------|\n")
+              "|-----------------------------------------------------|\n"
+              "\n Please Enter A Command:  ")
 
-
-    def poll_read_UART(self):
-        while True:
-            data = self.connection.read()
-            if data == b'c':
-                self.curr_state = 0
-            elif data == b'd':
-                self.curr_state = 1
-            elif data == b'd':
-                self.curr_state = 2
-            elif data == b'e':
-                self.curr_state = 3
-
-
-    def main_thread(self):
-        while True:
-            #self._print_menu()
-            print(self.curr_state)
-            #system("cls")
-            msg = input("Enter a command: ")
-            if msg == "next":
+    def poll_user_input(self):
+        while self.running:
+            command = input()
+            if command == "next":
                 self.connection.write(NEXT_STATE)
-            elif msg == "prev":
+            elif command == "prev":
                 self.connection.write(PREV_STATE)
+            elif command == "q":
+                self.connection.close()
+                self.running = False
+                exit()
             else:
                 print("INVALID STATE!")
 
-
+    def main_thread(self):
+        while self.running:
+            new_state = int(self.connection.read(1).decode("utf-8"))
+            if new_state == 0:
+                self.curr_state = 0
+            elif new_state == 1:
+                self.curr_state = 1
+            elif new_state == 2:
+                self.curr_state = 2
+            elif new_state == 3:
+                self.curr_state = 3
+            self._print_menu()
 
 
 if __name__ == "__main__":
